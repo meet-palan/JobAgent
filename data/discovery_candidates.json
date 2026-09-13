@@ -1,0 +1,23 @@
+{
+  "_comment": "Candidate company identifiers for scripts/discover_companies.py to LIVE-VERIFY before promotion into data/discovery_sources.json. A token appearing here is NOT treated as an active source -- discover_jobs.py never reads this file. Each candidate is a real company guessed to run its careers page on the named ATS (board token usually mirrors the company's own slug/domain); scripts/discover_companies.py confirms this with a real HTTP request and only a company whose board actually resolves (HTTP 200 with a parseable job list, even an empty one) is eligible to be added to discovery_sources.json -- a 404/unavailable candidate is dropped and reported, never guessed into the active list. Skewed toward product-led SaaS, fintech, and dev-tool companies (more likely to run Product/Business-Analysis/Project-Program openings) per profile/preferences.md, rather than a blind large-company sweep.",
+  "greenhouse_boards": [
+    "airbnb", "doordash", "affirm", "brex", "plaid", "asana", "dropbox", "pinterest",
+    "twilio", "squarespace", "gusto", "instacart", "webflow", "grammarly", "canva",
+    "unity", "reddit", "cloudflare", "hashicorp", "elastic", "mongodb", "gong",
+    "amplitude", "carta", "airtable", "calendly", "clickup", "monday", "freshworks",
+    "chargebee", "hasura", "innovaccer", "whatfix", "browserstack", "clevertap",
+    "moengage", "razorpay", "cars24", "urbancompany", "capillarytechnologies",
+    "darwinbox", "leadsquared", "zenoti", "gupshup", "smallcase", "khatabook",
+    "slice", "niyo", "rippling", "checkr", "opendoor", "scaleai"
+  ],
+  "lever_companies": [
+    "netlify", "attentive", "patreon", "betterup", "gem", "ironclad", "glossier",
+    "sofi", "chime", "earnin", "branch", "upgrade", "current", "eventbrite",
+    "medium", "box", "shopify", "yelp"
+  ],
+  "ashby_boards": [
+    "retool", "loom", "deel", "remote", "pave", "substack", "clipboardhealth",
+    "drata", "vanta", "secureframe", "assemblyai", "cohere", "runwayml",
+    "elevenlabs", "harvey", "sierra", "glean", "perplexity"
+  ]
+}

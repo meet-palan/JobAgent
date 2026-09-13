@@ -1,0 +1,187 @@
+{
+  "_comment": "Structured mirror of profile/profile.md, profile/skills.md, and profile/preferences.md, used as the machine-readable input to scripts/score_job.py and scripts/discover_jobs.py. Keep in sync by hand when those files change. preferred_locations includes 'Bengaluru'/'Gandhinagar' as the official names for 'Bangalore'/'GIFT City' and 'Navi Mumbai' as part of the Mumbai metro area, so postings using those official names still match -- profile/preferences.md itself is left in the user's own words.",
+  "name": "Meet Palan",
+  "total_experience_years": 1.0,
+  "target_titles": [
+    "Business Analyst",
+    "Project Manager",
+    "Product Manager",
+    "Associate Product Manager"
+  ],
+  "secondary_titles": [
+    "Project Coordinator"
+  ],
+  "max_experience_requirement_years": 1.0,
+  "skills": [
+    "Business Analysis",
+    "Requirement Gathering",
+    "Stakeholder Management",
+    "Process Analysis",
+    "Documentation",
+    "BRD",
+    "SOW",
+    "SQL",
+    "Tableau",
+    "Excel",
+    "Agile",
+    "Scrum",
+    "ChatGPT",
+    "Gemini",
+    "Perplexity",
+    "Notebook LM",
+    "Microsoft Word",
+    "Flutter",
+    "SQLite",
+    "WordPress",
+    "Communication",
+    "Leadership",
+    "Business Acumen",
+    "Presentation",
+    "Time Management",
+    "Adaptability"
+  ],
+  "preferred_industries": [
+    "IT services",
+    "Product"
+  ],
+  "avoid_industries": [],
+  "preferred_locations": [
+    "Ahmedabad",
+    "GIFT City",
+    "Gandhinagar",
+    "Pune",
+    "Bangalore",
+    "Bengaluru",
+    "Mumbai",
+    "Navi Mumbai"
+  ],
+  "preferred_work_modes": [
+    "remote",
+    "hybrid",
+    "onsite"
+  ],
+  "max_commute_hours_each_way": 2,
+  "min_acceptable_salary_inr_per_year": 300000,
+  "target_salary_min_inr_per_year": 350000,
+  "target_salary_max_inr_per_year": 400000,
+  "preferred_company_sizes": [
+    "startup",
+    "mid-size",
+    "large enterprise",
+    "MNC"
+  ],
+  "avoid_job_types": [
+    "unpaid",
+    "night shift"
+  ],
+  "earliest_start_date": "2026-10-02",
+  "work_authorization": "Authorized to work in India; no visa sponsorship needed",
+  "_capabilities_comment": "Evidence-backed capability areas used by scripts/score_job.py's capability/evidence matching. 'strength' is 'professional' only when tied to actual paid employment; 'practical' covers project, coursework, or tool-level evidence; 'none' means the resume shows no evidence at all -- never inflated to avoid claiming project work equals professional experience.",
+  "capabilities": {
+    "business_analysis": {
+      "strength": "professional",
+      "evidence": [
+        "Business Analyst and Project Coordinator, Tibicle LLP (Apr 2025-Present): requirement gathering, stakeholder alignment, BRD/SOW documentation",
+        "Career Essentials in Business Analysis certification -- Microsoft & LinkedIn Learning (Jun 2024)",
+        "Led requirement gathering and market research for the Expense Tracker App project, documented into a BRD"
+      ]
+    },
+    "requirements_gathering": {
+      "strength": "professional",
+      "evidence": [
+        "Requirement gathering and stakeholder alignment at Tibicle LLP",
+        "Directed requirement gathering and market research for the Expense Tracker App, documented into a BRD to guide feature scope"
+      ]
+    },
+    "stakeholder_communication": {
+      "strength": "professional",
+      "evidence": [
+        "Served as primary client POC at Tibicle LLP, leading client communication from requirement discovery through delivery, managing expectations and resolving escalations",
+        "Partnering with BE, FE, Design, QA, Sales, and Management to keep delivery on track"
+      ]
+    },
+    "documentation": {
+      "strength": "professional",
+      "evidence": [
+        "BRD/SOW documentation at Tibicle LLP",
+        "Documented Expense Tracker App findings into a comprehensive BRD",
+        "Core skill: Documentation (including BRD/SOW)"
+      ]
+    },
+    "project_management": {
+      "strength": "professional",
+      "evidence": [
+        "Managed end-to-end project execution for 6+ concurrent projects at Tibicle LLP: owned timelines, scope, and cross-functional coordination with teams of 8-9 members, delivering 3 projects on time and within scope",
+        "Job title includes 'Project Coordinator'"
+      ]
+    },
+    "agile_scrum": {
+      "strength": "professional",
+      "evidence": [
+        "Facilitated daily Agile scrum meetings and maintained MOMs at Tibicle LLP",
+        "Core skill: Agile, Scrum"
+      ]
+    },
+    "client_facing": {
+      "strength": "professional",
+      "evidence": [
+        "Served as primary client POC at Tibicle LLP, leading client communication from requirement discovery through delivery"
+      ]
+    },
+    "product_management": {
+      "strength": "practical",
+      "evidence": [
+        "Becoming Product Manager: A Complete Guide certification -- LinkedIn Learning & IIBA (Sep 2025)",
+        "Resume states candidate is 'building toward Product Manager roles' (no Product Manager job title held)",
+        "Expense Tracker App (2024): directed requirement gathering and market research to define feature scope for a budgeting/expense-management product",
+        "Food Recipe App (2024): built and shaped the feature set of a consumer app (browse/search/filter/save/manage recipes, plus create/edit/delete/sell for user-created recipes)"
+      ]
+    },
+    "analytics": {
+      "strength": "practical",
+      "evidence": [
+        "Core skills: SQL, Tableau, Excel (tool proficiency listed; no dedicated analytics project or role responsibility described in work experience)"
+      ]
+    },
+    "software_development": {
+      "strength": "practical",
+      "evidence": [
+        "Web Development Intern, Fuerte Developers (May-Jul 2023): customized WordPress websites for client projects",
+        "Food Recipe App (2024): built with Flutter and SQLite"
+      ]
+    },
+    "ai_tools": {
+      "strength": "practical",
+      "evidence": [
+        "Uses ChatGPT, Gemini, Perplexity, Notebook LM to accelerate documentation and research",
+        "Google AI Professional Certificate -- Google (Jul 2026)"
+      ]
+    },
+    "research": {
+      "strength": "practical",
+      "evidence": [
+        "Conducted market research for the Expense Tracker App project",
+        "Uses AI tools to accelerate research"
+      ]
+    },
+    "personal_projects": {
+      "strength": "practical",
+      "evidence": [
+        "Expense Tracker App (2024): led a team, requirement gathering, market research, BRD documentation",
+        "Food Recipe App (2024): mobile app built with Flutter/SQLite, including a marketplace feature for user-created recipes"
+      ]
+    },
+    "design_figma": {
+      "strength": "none",
+      "evidence": []
+    },
+    "testing_qa": {
+      "strength": "none",
+      "evidence": []
+    },
+    "freelance_or_startup_founder_work": {
+      "strength": "none",
+      "evidence": []
+    }
+  }
+}

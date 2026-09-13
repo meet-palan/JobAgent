@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JobAgent Dashboard</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #e2e5ea; --text: #1f2430; --muted: #6b7280;
+    --accent: #2563eb; --auto: #15803d; --review: #b45309; --skip: #9ca3af;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header .today-date { color: var(--muted); font-size: 13px; }
+  .stats { display: flex; gap: 10px; padding: 12px 20px; flex-wrap: wrap; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; min-width: 100px; text-align: center; cursor: pointer; }
+  .stat.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .stat .n { font-size: 20px; font-weight: 700; }
+  .stat .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 20px 12px; align-items: center; }
+  .toolbar input, .toolbar select, .toolbar button { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--panel); color: var(--text); }
+  .toolbar input[type=text] { min-width: 180px; }
+  .toolbar input[type=number] { width: 90px; }
+  .toolbar button { cursor: pointer; }
+  .toolbar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .view-toggle { display: flex; gap: 6px; }
+  .view-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { padding: 0 20px 40px; }
+  .section-title { font-size: 15px; font-weight: 700; margin: 6px 0 12px; letter-spacing: .02em; }
+  .empty { background: var(--panel); border: 1px dashed var(--border); border-radius: 8px; padding: 30px; text-align: center; color: var(--muted); }
+  .empty button { margin-top: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .card h3 { margin: 0; font-size: 15px; }
+  .card .company { color: var(--muted); font-size: 13px; }
+  .row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; }
+  .badge.AUTO_APPLY { background: var(--auto); }
+  .badge.REVIEW { background: var(--review); }
+  .badge.SKIP { background: var(--skip); }
+  .score { font-weight: 700; font-size: 15px; }
+  .meta { font-size: 12px; color: var(--muted); }
+  .skills { font-size: 12px; color: var(--muted); }
+  .card-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .card-actions button, .card-actions a { flex: 1; text-align: center; padding: 6px 8px; font-size: 12px; border-radius: 6px; border: 1px solid var(--border); background: #fafbfc; color: var(--text); text-decoration: none; cursor: pointer; }
+  .card-actions a.disabled { opacity: .4; pointer-events: none; }
+  /* modal */
+  #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10; }
+  #overlay.open { display: flex; justify-content: flex-end; }
+  #panel { width: min(520px, 100%); background: var(--panel); height: 100%; overflow-y: auto; padding: 20px; }
+  #panel h2 { margin-top: 0; }
+  #panel .field { margin-bottom: 10px; font-size: 13px; }
+  #panel .field .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+  #panel .field .v { white-space: pre-wrap; word-break: break-word; }
+  #panel ul { margin: 4px 0; padding-left: 18px; }
+  #panel .close { float: right; cursor: pointer; border: none; background: none; font-size: 18px; }
+  #panel hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+  .footer-note { color: var(--muted); font-size: 12px; padding: 6px 20px 20px; }
+  @media (max-width: 480px) { header { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>JobAgent</h1>
+    <div class="today-date" id="today-date">Today: —</div>
+  </div>
+  <div class="toolbar" style="padding:0;">
+    <button id="refresh-btn" class="primary">Refresh</button>
+    <label style="font-size:12px; color: var(--muted); display:flex; align-items:center; gap:4px;">
+      <input type="checkbox" id="auto-refresh"> Auto-refresh (60s)
+    </label>
+  </div>
+</header>
+
+<div class="stats" id="stats"></div>
+
+<div class="toolbar">
+  <div class="view-toggle">
+    <button id="view-today" class="active">TODAY'S JOBS</button>
+    <button id="view-all">ALL JOBS</button>
+  </div>
+  <input type="text" id="search" placeholder="Search title, company, description...">
+  <select id="decision">
+    <option value="All">All decisions</option>
+    <option value="AUTO_APPLY">AUTO_APPLY</option>
+    <option value="REVIEW">REVIEW</option>
+    <option value="SKIP">SKIP</option>
+  </select>
+  <select id="role_family"><option value="All">All role families</option></select>
+  <input type="text" id="location" placeholder="Location">
+  <select id="source"><option value="">All sources</option></select>
+  <input type="number" id="min_score" placeholder="Min score" min="0" max="100">
+  <select id="sort">
+    <option value="score">Sort: Match Score</option>
+    <option value="newest">Sort: Newest Discovered</option>
+    <option value="company">Sort: Company</option>
+    <option value="title">Sort: Job Title</option>
+  </select>
+</div>
+
+<main>
+  <div class="section-title" id="section-title">TODAY'S JOBS — 0</div>
+  <div id="content"></div>
+</main>
+
+<div class="footer-note">Read-only view of data/jobs.json. Does not call any AI model, re-run matching, or re-run discovery.</div>
+
+<div id="overlay">
+  <div id="panel">
+    <button class="close" id="close-panel">&times;</button>
+    <div id="panel-content"></div>
+  </div>
+</div>
+
+<script>
+const state = { view: 'today', search: '', decision: 'All', role_family: 'All', location: '', source: '', min_score: '', sort: 'score' };
+let lastData = null;
+
+function nv(val) {
+  if (val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) return 'Not provided';
+  return val;
+}
+
+function fmtExperience(job) {
+  if (job.min_experience_years === null || job.min_experience_years === undefined) return 'Not provided';
+  let s = String(job.min_experience_years);
+  if (job.max_experience_years !== null && job.max_experience_years !== undefined) s += `–${job.max_experience_years}`;
+  else s += '+';
+  return s + ' years';
+}
+
+function fmtSalary(job) {
+  if (job.salary_min === null || job.salary_min === undefined) return 'Not provided';
+  const cur = job.salary_currency || '';
+  if (job.salary_max !== null && job.salary_max !== undefined && job.salary_max !== job.salary_min) {
+    return `${cur} ${job.salary_min.toLocaleString()} – ${job.salary_max.toLocaleString()}`.trim();
+  }
+  return `${cur} ${job.salary_min.toLocaleString()}`.trim();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function buildUrl() {
+  const p = new URLSearchParams();
+  p.set('view', state.view);
+  if (state.search) p.set('search', state.search);
+  if (state.decision && state.decision !== 'All') p.set('decision', state.decision);
+  if (state.role_family && state.role_family !== 'All') p.set('role_family', state.role_family);
+  if (state.location) p.set('location', state.location);
+  if (state.source) p.set('source', state.source);
+  if (state.min_score) p.set('min_score', state.min_score);
+  p.set('sort', state.sort);
+  return '/api/jobs?' + p.toString();
+}
+
+async function load() {
+  const res = await fetch(buildUrl(), { cache: 'no-store' });
+  const data = await res.json();
+  lastData = data;
+  render(data);
+}
+
+function render(data) {
+  document.getElementById('today-date').textContent = 'Today: ' + data.today;
+
+  const stats = document.getElementById('stats');
+  const items = [
+    ['today', "Today's Jobs"], ['all', 'All Jobs'],
+    ['AUTO_APPLY', 'AUTO_APPLY'], ['REVIEW', 'REVIEW'], ['SKIP', 'SKIP'],
+  ];
+  stats.innerHTML = items.map(([k, label]) =>
+    `<div class="stat"><div class="n">${data.counts[k]}</div><div class="l">${label}</div></div>`
+  ).join('');
+
+  const roleSelect = document.getElementById('role_family');
+  if (roleSelect.dataset.built !== '1') {
+    for (const rf of data.role_families) {
+      const opt = document.createElement('option');
+      opt.value = rf; opt.textContent = rf;
+      roleSelect.appendChild(opt);
+    }
+    roleSelect.dataset.built = '1';
+  }
+  const sourceSelect = document.getElementById('source');
+  if (sourceSelect.dataset.built !== '1') {
+    for (const s of data.sources) {
+      const opt = document.createElement('option');
+      opt.value = s; opt.textContent = s;
+      sourceSelect.appendChild(opt);
+    }
+    sourceSelect.dataset.built = '1';
+  }
+
+  document.getElementById('view-today').classList.toggle('active', state.view === 'today');
+  document.getElementById('view-all').classList.toggle('active', state.view === 'all');
+
+  const title = state.view === 'today' ? "TODAY'S JOBS" : 'ALL JOBS';
+  document.getElementById('section-title').textContent = `${title} — ${data.jobs.length}`;
+
+  const content = document.getElementById('content');
+  if (data.jobs.length === 0) {
+    if (state.view === 'today') {
+      content.innerHTML = `<div class="empty">No jobs discovered today.<br><button id="view-all-empty" class="primary" style="margin-top:10px;">View All Jobs</button></div>`;
+      document.getElementById('view-all-empty').onclick = () => { state.view = 'all'; load(); };
+    } else {
+      content.innerHTML = `<div class="empty">No jobs match the current filters.</div>`;
+    }
+    return;
+  }
+
+  content.innerHTML = `<div class="grid">${data.jobs.map(cardHtml).join('')}</div>`;
+  content.querySelectorAll('[data-details]').forEach(btn => {
+    btn.addEventListener('click', () => showDetails(btn.dataset.details));
+  });
+}
+
+function cardHtml(job) {
+  const skills = [...(job.required_skills || []), ...(job.preferred_skills || [])];
+  const skillsText = skills.length ? escapeHtml(skills.slice(0, 6).join(', ')) + (skills.length > 6 ? '…' : '') : 'Not provided';
+  const discovered = job.discovered_at || job.date_discovered || 'Not provided';
+  const applyUrl = job.application_url;
+  const jobUrl = job.source_url || job.application_url;
+  return `
+    <div class="card">
+      <h3>${escapeHtml(nv(job.title))}</h3>
+      <div class="company">${escapeHtml(nv(job.company))}</div>
+      <div class="row"><span class="score">${job.score ?? '—'}/100</span><span class="badge ${job.application_decision || 'SKIP'}">${escapeHtml(job.application_decision || 'Not provided')}</span></div>
+      <div class="meta">${escapeHtml(nv(job.location))} · ${escapeHtml(nv(job.work_mode))}</div>
+      <div class="meta">${escapeHtml(nv(job.role_family))} · ${escapeHtml(nv(job.career_level))}</div>
+      <div class="meta">Experience: ${fmtExperience(job)}</div>
+      <div class="meta">Salary: ${fmtSalary(job)}</div>
+      <div class="meta">Posted: ${escapeHtml(nv(job.posted_date))} · Discovered: ${escapeHtml(discovered)}</div>
+      <div class="skills">Skills: ${skillsText}</div>
+      <div class="card-actions">
+        <button data-details="${escapeHtml(job.id || '')}">View Details</button>
+        <a class="${jobUrl ? '' : 'disabled'}" href="${jobUrl ? escapeHtml(jobUrl) : '#'}" target="_blank" rel="noopener">Open Job</a>
+        <a class="${applyUrl ? '' : 'disabled'}" href="${applyUrl ? escapeHtml(applyUrl) : '#'}" target="_blank" rel="noopener">Open Application</a>
+      </div>
+    </div>`;
+}
+
+function field(label, value) {
+  const v = (value === null || value === undefined || value === '') ? 'Not provided' : value;
+  return `<div class="field"><div class="k">${escapeHtml(label)}</div><div class="v">${escapeHtml(v)}</div></div>`;
+}
+
+function listField(label, items) {
+  if (!items || items.length === 0) return field(label, null);
+  return `<div class="field"><div class="k">${escapeHtml(label)}</div><ul>${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul></div>`;
+}
+
+function showDetails(jobId) {
+  const job = (lastData.jobs || []).find(j => j.id === jobId);
+  if (!job) return;
+  const skills = [...(job.required_skills || []), ...(job.preferred_skills || [])];
+  const capabilities = [...(job.relevant_evidence || []), ...(job.transferable_evidence || [])];
+  const html = `
+    <h2>${escapeHtml(nv(job.title))}</h2>
+    ${field('Company', job.company)}
+    ${field('Match Score', job.score !== undefined && job.score !== null ? job.score + '/100' : null)}
+    ${field('Decision', job.application_decision)}
+    ${field('Role Family', job.role_family)}
+    ${field('Career Level', job.career_level)}
+    <hr>
+    ${field('Location', job.location)}
+    ${field('Work Mode', job.work_mode)}
+    ${field('Salary', fmtSalary(job) === 'Not provided' ? null : fmtSalary(job))}
+    ${field('Experience Requirement', fmtExperience(job) === 'Not provided' ? null : fmtExperience(job))}
+    ${field('Posted Date', job.posted_date)}
+    ${field('Discovered Date', job.discovered_at || job.date_discovered)}
+    ${field('First Seen', job.first_seen_at)}
+    ${field('Last Seen', job.last_seen_at)}
+    <hr>
+    ${listField('Skills', skills)}
+    ${listField('Matched Capabilities', capabilities)}
+    ${listField('Missing Requirements', job.missing_requirements)}
+    ${field('Match Explanation', job.decision_reason)}
+    <hr>
+    ${field('Full Job Description', job.description)}
+    <hr>
+    ${field('Application URL', job.application_url)}
+    ${field('Source URL', job.source_url)}
+    ${field('Source', job.source)}
+    ${field('Source Job ID', job.source_job_id)}
+  `;
+  document.getElementById('panel-content').innerHTML = html;
+  document.getElementById('overlay').classList.add('open');
+}
+
+document.getElementById('close-panel').onclick = () => document.getElementById('overlay').classList.remove('open');
+document.getElementById('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') e.currentTarget.classList.remove('open'); });
+
+document.getElementById('view-today').onclick = () => { state.view = 'today'; load(); };
+document.getElementById('view-all').onclick = () => { state.view = 'all'; load(); };
+document.getElementById('refresh-btn').onclick = load;
+
+let searchTimer;
+document.getElementById('search').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.search = e.target.value; load(); }, 300);
+});
+document.getElementById('decision').addEventListener('change', e => { state.decision = e.target.value; load(); });
+document.getElementById('role_family').addEventListener('change', e => { state.role_family = e.target.value; load(); });
+document.getElementById('location').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.location = e.target.value; load(); }, 300);
+});
+document.getElementById('source').addEventListener('change', e => { state.source = e.target.value; load(); });
+document.getElementById('min_score').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.min_score = e.target.value; load(); }, 300);
+});
+document.getElementById('sort').addEventListener('change', e => { state.sort = e.target.value; load(); });
+
+let autoTimer = null;
+document.getElementById('auto-refresh').addEventListener('change', e => {
+  if (e.target.checked) autoTimer = setInterval(load, 60000);
+  else clearInterval(autoTimer);
+});
+
+load();
+</script>
+</body>
+</html>

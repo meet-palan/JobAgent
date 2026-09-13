@@ -1,0 +1,75 @@
+{
+  "_comment": "Sources scripts/discover_jobs.py pulls from. Only public, unauthenticated ATS/career-site APIs -- nothing that requires login or violates a site's Terms of Service. Every company below was live-verified (a real HTTP request that actually returned postings) before being added, rather than guessed.",
+  "greenhouse_boards": [
+    "groww",
+    "postman",
+    "highradius",
+    "netskope",
+    "druva",
+    "zetaglobal",
+    "gitlab",
+    "justworks",
+    "figma",
+    "discord",
+    "robinhood",
+    "coinbase",
+    "airbnb",
+    "affirm",
+    "brex",
+    "asana",
+    "dropbox",
+    "pinterest",
+    "twilio",
+    "gusto",
+    "instacart",
+    "webflow",
+    "reddit",
+    "cloudflare",
+    "elastic",
+    "mongodb",
+    "amplitude",
+    "carta",
+    "airtable",
+    "calendly",
+    "zenoti",
+    "checkr",
+    "scaleai"
+  ],
+  "lever_companies": [
+    "zeta",
+    "meesho",
+    "cred"
+  ],
+  "ashby_boards": [
+    "ramp",
+    "notion",
+    "linear",
+    "vercel",
+    "replit",
+    "watershed",
+    "mercury",
+    "openai",
+    "substack",
+    "drata",
+    "vanta",
+    "secureframe",
+    "cohere",
+    "harvey",
+    "sierra",
+    "perplexity"
+  ],
+  "_smartrecruiters_note": "The SmartRecruiters connector (scripts/discover_jobs.py: fetch_smartrecruiters_page / normalize_smartrecruiters_job) is implemented and tested, but api.smartrecruiters.com/v1/companies/{id}/postings only returns data for companies that have opted their public Postings feed in (SmartRecruiters disables it by default on lower plans). ~15 real companies were tried live (visa, bosch, tomtom, mcdonalds, ikea, adidas, skechers, docplanner, and more) and every one returned totalFound: 0. Add a company identifier here only once you've confirmed live (curl the URL above) that it returns non-zero postings.",
+  "smartrecruiters_companies": [],
+  "workday": [
+    {
+      "name": "Accenture",
+      "cxs_base_url": "https://accenture.wd103.myworkdayjobs.com/wday/cxs/accenture/AccentureCareers"
+    }
+  ],
+  "_unavailable_sources": {
+    "linkedin": "Excluded by explicit decision -- LinkedIn does not offer the API access needed for general personal job discovery (no partner/Talent-Solutions agreement), and no unauthenticated bulk endpoint exists: robots.txt disallows /jobs-guest/ (the endpoint most no-login scrapers rely on) and /jobs?runSearch*, plus a blanket notice that 'automated means to access LinkedIn without express permission is strictly prohibited'.",
+    "naukri": "robots.txt explicitly names and blocks AI/LLM agents (Claude-User, claudebot, gptbot, etc.) with 'Disallow: /' -- this tool is directly named as disallowed, so it must not be accessed at all.",
+    "indeed": "robots.txt is largely permissive, but Indeed's Terms of Service separately prohibit automated scraping/data mining, and its public Job Search/Publisher API program (the only sanctioned bulk-access path) was closed to new applicants. Accessing search results programmatically without that partnership would mean ignoring documented anti-bot/ToS restrictions, which this project's access rules forbid.",
+    "wellfound": "robots.txt disallows /search and the job-listing query-param patterns (?jobId=, ?jobSlug=, ?role=) that any bulk discovery would need, and there is no public postings API. Individual static job pages exist but can't be enumerated without the disallowed search."
+  }
+}
