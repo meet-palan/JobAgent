@@ -300,22 +300,22 @@ document.getElementById('view-today').onclick = () => { state.view = 'today'; lo
 document.getElementById('view-all').onclick = () => { state.view = 'all'; load(); };
 document.getElementById('refresh-btn').onclick = load;
 
-let searchTimer;
-document.getElementById('search').addEventListener('input', e => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { state.search = e.target.value; load(); }, 300);
-});
+// The three free-typing filters (search/location/min_score) share one
+// debounce timer, same as before this cleanup: typing in a second field
+// within the 300ms window cancels the first field's pending update rather
+// than running both, which is the existing, unchanged behavior -- this only
+// removes the copy-pasted clearTimeout/setTimeout block three times over.
+let filterTimer;
+function debouncedFilterUpdate(key, value) {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => { state[key] = value; load(); }, 300);
+}
+document.getElementById('search').addEventListener('input', e => debouncedFilterUpdate('search', e.target.value));
 document.getElementById('decision').addEventListener('change', e => { state.decision = e.target.value; load(); });
 document.getElementById('role_family').addEventListener('change', e => { state.role_family = e.target.value; load(); });
-document.getElementById('location').addEventListener('input', e => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { state.location = e.target.value; load(); }, 300);
-});
+document.getElementById('location').addEventListener('input', e => debouncedFilterUpdate('location', e.target.value));
 document.getElementById('source').addEventListener('change', e => { state.source = e.target.value; load(); });
-document.getElementById('min_score').addEventListener('input', e => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { state.min_score = e.target.value; load(); }, 300);
-});
+document.getElementById('min_score').addEventListener('input', e => debouncedFilterUpdate('min_score', e.target.value));
 document.getElementById('sort').addEventListener('change', e => { state.sort = e.target.value; load(); });
 
 let autoTimer = null;

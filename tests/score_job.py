@@ -443,5 +443,74 @@ class AutoApplyPreconditionsTestCase(unittest.TestCase):
         self.assertFalse(precheck["checks"]["not_already_applied"])
 
 
+class ExperienceSafetyGateTestCase(unittest.TestCase):
+    """AUTO_APPLY safety fix: a job's stated minimum experience must not
+    exceed the candidate's actual professional experience (1.0 year for
+    make_candidate()). Regression coverage for the bug where a candidate
+    with 1 year could reach AUTO_APPLY against a job requiring 2 years,
+    because the old AUTO_APPLY_MAX_EXPERIENCE_GAP (1.0) treated a 1-year
+    shortfall as "close enough" -- it never distinguished "0 years short"
+    from "1 year short of a 1-year candidate's entire experience"."""
+
+    def test_case1_job_requires_zero_years_can_auto_apply(self):
+        job = make_job(title="Business Analyst", min_experience_years=0, max_experience_years=None)
+        result = sj.score_job(job, make_candidate())
+        self.assertEqual(result["application_decision"], "AUTO_APPLY")
+
+    def test_case2_job_requires_exactly_candidate_years_can_auto_apply(self):
+        job = make_job(title="Business Analyst", min_experience_years=1, max_experience_years=1)
+        result = sj.score_job(job, make_candidate())
+        self.assertEqual(result["experience_gap_years"], 0.0)
+        self.assertEqual(result["application_decision"], "AUTO_APPLY")
+
+    def test_case3_job_requires_one_plus_years_can_auto_apply(self):
+        job = make_job(title="Business Analyst", min_experience_years=1, max_experience_years=None)
+        result = sj.score_job(job, make_candidate())
+        self.assertEqual(result["experience_gap_years"], 0.0)
+        self.assertEqual(result["application_decision"], "AUTO_APPLY")
+
+    def test_case4_job_requires_two_years_is_not_auto_apply(self):
+        # Reproduces the reported bug: candidate=1y, job requires 2y.
+        job = make_job(title="Business Analyst", min_experience_years=2, max_experience_years=None)
+        result = sj.score_job(job, make_candidate())
+        self.assertEqual(result["experience_gap_years"], 1.0)
+        self.assertNotEqual(result["application_decision"], "AUTO_APPLY")
+        self.assertEqual(result["application_decision"], "REVIEW")
+
+    def test_case5_job_requires_three_years_is_not_auto_apply(self):
+        job = make_job(title="Business Analyst", min_experience_years=3, max_experience_years=None)
+        result = sj.score_job(job, make_candidate())
+        self.assertEqual(result["experience_gap_years"], 2.0)
+        self.assertNotEqual(result["application_decision"], "AUTO_APPLY")
+        self.assertIn(result["application_decision"], ("REVIEW", "SKIP"))
+
+    def test_case6_job_requires_five_plus_years_is_skip(self):
+        job = make_job(title="Business Analyst", min_experience_years=5, max_experience_years=None)
+        result = sj.score_job(job, make_candidate())
+        self.assertNotEqual(result["application_decision"], "AUTO_APPLY")
+        self.assertEqual(result["application_decision"], "SKIP")
+
+    def test_case7_unstated_experience_is_not_rejected_for_being_unknown(self):
+        job = make_job(title="Business Analyst", min_experience_years=None, max_experience_years=None)
+        result = sj.score_job(job, make_candidate())
+        self.assertEqual(result["experience_gap_years"], 0.0)
+        self.assertNotEqual(result["application_decision"], "SKIP")
+
+    def test_case8_senior_title_marker_skips_regardless_of_low_experience_requirement(self):
+        job = make_job(title="Senior Business Analyst", min_experience_years=0, max_experience_years=1)
+        result = sj.score_job(job, make_candidate())
+        self.assertEqual(result["career_level"], "SENIOR")
+        self.assertEqual(result["application_decision"], "SKIP")
+
+    def test_case9_high_score_does_not_override_experience_mismatch(self):
+        # Mandatory case: this is the exact shape of the reported bug --
+        # a job scoring comfortably >=85 must still not reach AUTO_APPLY
+        # when its stated minimum experience exceeds the candidate's.
+        job = make_job(title="Business Analyst", min_experience_years=2, max_experience_years=None)
+        result = sj.score_job(job, make_candidate())
+        self.assertGreaterEqual(result["overall_match_score"], 85)
+        self.assertNotEqual(result["application_decision"], "AUTO_APPLY")
+
+
 if __name__ == "__main__":
     unittest.main()

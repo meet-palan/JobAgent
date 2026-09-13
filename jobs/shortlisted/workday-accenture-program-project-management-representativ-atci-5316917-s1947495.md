@@ -2,7 +2,7 @@
 
 - Match: 85/100
 - Role family: PROJECT_PROGRAM   Career level: JUNIOR
-- Decision: AUTO_APPLY -- Score 85 >= 85, target role family, JUNIOR level, and only a 1-year experience gap.
+- Decision: REVIEW -- Worth a human look: experience gap is 1 years.
 - Location: Bengaluru (onsite)
 - Experience required: 2.0+ years (gap: 1 years)
 - Source: workday:accenture

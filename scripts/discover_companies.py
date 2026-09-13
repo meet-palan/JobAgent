@@ -75,34 +75,34 @@ SOURCE_FIELD = {
 }
 
 
-def verify_greenhouse(token: str, timeout: int) -> dict[str, Any]:
+def _verify_board(fetch_fn, identifier: str, timeout: int) -> dict[str, Any]:
+    """Shared verification body for every connector: make the ONE real request
+    fetch_fn already knows how to make for job discovery, and report existence
+    from its outcome rather than a guess. A network/HTTP failure (caught via
+    discover_jobs.py's SOURCE_UNAVAILABLE_EXCEPTIONS -- the same tuple job
+    discovery treats as "this source is unavailable right now") means the
+    board is not verified; it is never assumed to exist just because the
+    identifier looks plausible.
+    """
     try:
-        postings = dj.fetch_greenhouse_jobs(token, timeout=timeout)
+        postings = fetch_fn(identifier, timeout=timeout)
     except dj.SOURCE_UNAVAILABLE_EXCEPTIONS as e:
         return {"exists": False, "error": str(e), "postings": []}
     if not isinstance(postings, list):
         return {"exists": False, "error": "unexpected response shape", "postings": []}
     return {"exists": True, "error": None, "postings": postings}
+
+
+def verify_greenhouse(token: str, timeout: int) -> dict[str, Any]:
+    return _verify_board(dj.fetch_greenhouse_jobs, token, timeout)
 
 
 def verify_lever(slug: str, timeout: int) -> dict[str, Any]:
-    try:
-        postings = dj.fetch_lever_jobs(slug, timeout=timeout)
-    except dj.SOURCE_UNAVAILABLE_EXCEPTIONS as e:
-        return {"exists": False, "error": str(e), "postings": []}
-    if not isinstance(postings, list):
-        return {"exists": False, "error": "unexpected response shape", "postings": []}
-    return {"exists": True, "error": None, "postings": postings}
+    return _verify_board(dj.fetch_lever_jobs, slug, timeout)
 
 
 def verify_ashby(board: str, timeout: int) -> dict[str, Any]:
-    try:
-        postings = dj.fetch_ashby_jobs(board, timeout=timeout)
-    except dj.SOURCE_UNAVAILABLE_EXCEPTIONS as e:
-        return {"exists": False, "error": str(e), "postings": []}
-    if not isinstance(postings, list):
-        return {"exists": False, "error": "unexpected response shape", "postings": []}
-    return {"exists": True, "error": None, "postings": postings}
+    return _verify_board(dj.fetch_ashby_jobs, board, timeout)
 
 
 VERIFIERS = {"greenhouse": verify_greenhouse, "lever": verify_lever, "ashby": verify_ashby}
@@ -128,6 +128,15 @@ def already_active(sources: dict, connector: str, identifier: str) -> bool:
 def check_connector(
     connector: str, candidates: list[str], sources: dict, keywords: list[str], config: dict,
 ) -> dict[str, Any]:
+    """Entry point of Stage 0's verification loop for one connector
+    (greenhouse/lever/ashby): skip candidates already active, verify the rest
+    live (one real request each, respecting config["max_companies_per_source"]
+    and config["delay"]), and classify each into verified_relevant (board
+    exists + has a currently-relevant opening -- eligible for promotion),
+    verified_no_relevant_match (board is real but nothing to add yet), or
+    not_found_or_unavailable (dropped, never promoted). See apply_results()
+    for how verified_relevant candidates make it into discovery_sources.json.
+    """
     result = {
         "connector": connector,
         "candidates_total": len(candidates),

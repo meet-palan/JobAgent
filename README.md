@@ -10,8 +10,9 @@ submission.
 
 **Phase 5 — complete.** Company discovery, job discovery/normalization,
 deduplication with history tracking, the V2 matching engine, and a read-only
-dashboard are all implemented, tested (181 tests), and validated against
-live data (203 unique jobs at last run). See
+dashboard are all implemented, tested (190 tests), and validated against
+live data (203 unique jobs at last run). A pre-Phase-6 safety audit tightened
+the AUTO_APPLY experience gate (see "AUTO_APPLY / REVIEW / SKIP" below) — see
 `docs/JobAgent_Algorithm_Reference.pdf` for full algorithm detail and
 `docs/JobAgent_Project_Analysis.pdf` for a structural walkthrough.
 
@@ -144,9 +145,19 @@ A senior-level title, a role-family mismatch, a >2-year experience gap, or a
 critical missing requirement (avoided industry, below-minimum salary, near-
 total skills gap) forces **SKIP** regardless of score. Only a posting that
 clears every gate **and** scores ≥85 **and** reads entry/junior level **and**
-has ≤1 year experience gap becomes **AUTO_APPLY**; everything else that
-clears the SKIP gates is **REVIEW**. See `docs/JobAgent_Algorithm_Reference.pdf`
+has a stated minimum experience that does not exceed the candidate's actual
+professional experience becomes **AUTO_APPLY**; everything else that clears
+the SKIP gates is **REVIEW**. See `docs/JobAgent_Algorithm_Reference.pdf`
 Section 6 for the exact gate order.
+
+**Safety note (post-Phase-5 fix):** the experience gate previously allowed up
+to a 1-year gap, which let a candidate with 1 year of professional experience
+reach AUTO_APPLY against a job requiring 2 years. Experience *scoring* still
+gives partial credit to a slightly underqualified candidate (that's what can
+route a job to REVIEW), but that credit can never by itself unlock
+AUTO_APPLY — an unstated requirement is still never treated as a rejection,
+and this stays fully independent of `score_job.py`'s stable 9-component
+scoring, which was not changed.
 
 ## Dashboard
 
@@ -179,7 +190,7 @@ never duplicates a job, and only refreshes `last_seen_at` on unchanged ones.
 ## Running tests
 
 ```
-python tests/score_job.py           # 67 tests -- the V2 matching engine
+python tests/score_job.py           # 76 tests -- the V2 matching engine
 python tests/discover_jobs.py       # 58 tests -- fetch/normalize/dedupe/persist
 python tests/discover_companies.py  # 23 tests -- company verification
 python tests/dashboard.py           # 33 tests -- filter/sort/payload logic

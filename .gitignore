@@ -24,6 +24,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Ad-hoc data backups (e.g. data/jobs.json.backup-YYYYMMDD-HHMMSS) made before
+# a live discovery run -- safety copies, never intentionally committed.
+data/*.backup*
+
 # Personal documents (resumes, cover letters may contain PII)
 profile/resume/*
 !profile/resume/.gitkeep

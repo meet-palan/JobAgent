@@ -6885,8 +6885,8 @@
     "score": 85,
     "role_family": "PROJECT_PROGRAM",
     "career_level": "JUNIOR",
-    "application_decision": "AUTO_APPLY",
-    "decision_reason": "Score 85 >= 85, target role family, JUNIOR level, and only a 1-year experience gap.",
+    "application_decision": "REVIEW",
+    "decision_reason": "Worth a human look: experience gap is 1 years.",
     "score_breakdown": {
       "role_family_score": 20,
       "capability_score": 20,

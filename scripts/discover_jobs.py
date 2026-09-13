@@ -346,6 +346,9 @@ def fetch_greenhouse_jobs(board_token: str, timeout: int = DEFAULT_REQUEST_TIMEO
 
 
 def normalize_greenhouse_job(raw: dict, board_token: str) -> dict:
+    """Convert one raw Greenhouse posting (from fetch_greenhouse_jobs, which
+    already returns the board's full job list in one request -- Greenhouse's
+    public API has no pagination parameter) into the common job schema."""
     title = raw.get("title", "")
     location = (raw.get("location") or {}).get("name", "")
     content = strip_html(raw.get("content", ""))
@@ -410,6 +413,10 @@ def _is_experience_line(line: str) -> bool:
 
 
 def normalize_lever_job(raw: dict, company_slug: str) -> dict:
+    """Convert one raw Lever posting into the common job schema. Lever
+    structures requirements as free-text "lists" rather than discrete
+    fields, so required/preferred skills here are extracted bullets, not a
+    guaranteed-complete skill taxonomy."""
     title = raw.get("text", "")
     location = (raw.get("categories") or {}).get("location", "")
     description = strip_html(raw.get("descriptionPlain") or raw.get("description", ""))
@@ -469,6 +476,10 @@ def fetch_ashby_jobs(board_name: str, timeout: int = DEFAULT_REQUEST_TIMEOUT_SEC
 
 
 def normalize_ashby_job(raw: dict, board_name: str) -> dict:
+    """Convert one raw Ashby posting into the common job schema. Ashby's
+    public API doesn't break requirements into discrete skill bullets the
+    way Lever does, so required_skills/preferred_skills are left empty here
+    rather than guessed from free text."""
     title = raw.get("title", "")
     location = raw.get("location") or ""
     if raw.get("isRemote") and "remote" not in location.lower():
@@ -527,6 +538,11 @@ def fetch_smartrecruiters_page(company: str, offset: int, limit: int, timeout: i
 
 
 def normalize_smartrecruiters_job(raw: dict, company: str) -> dict:
+    """Convert one raw SmartRecruiters posting into the common job schema.
+    The postings LIST endpoint (unlike the other connectors) doesn't include
+    the full job ad body -- that needs a second per-posting detail call this
+    connector doesn't make -- so `description` here is limited to the one
+    fact the list response does carry (experience level), never fabricated."""
     title = raw.get("name", "")
     location_info = raw.get("location") or {}
     location = location_info.get("fullLocation") or location_info.get("city") or ""
@@ -594,6 +610,10 @@ def _workday_field(text: str, label: str) -> str | None:
 
 
 def normalize_workday_job(detail: dict, company_name: str, source_key: str) -> dict:
+    """Convert one Workday job-detail response (fetch_workday_detail) into
+    the common job schema. Unlike the other connectors, Workday requires a
+    separate detail fetch per job after the paginated search -- `detail` is
+    that per-job response, not a list entry."""
     info = detail.get("jobPostingInfo", {})
     title = info.get("title", "")
     location = info.get("location", "")
@@ -641,6 +661,10 @@ def normalize_workday_job(detail: dict, company_name: str, source_key: str) -> d
 # --------------------------------------------------------------------------
 
 def dedupe_key(job: dict) -> tuple:
+    """The weakest (last-resort) identity tier used by job_identity_keys():
+    normalized (company, title, location, sorted required_skills). Two
+    postings differing only in required_skills are NOT collapsed by this key
+    -- see job_identity_keys()'s docstring for why that's intentional."""
     skills_key = tuple(sorted(s.strip().lower() for s in job.get("required_skills", [])))
     return (
         (job.get("company") or "").strip().lower(),
@@ -687,6 +711,8 @@ def register_job(index: dict[tuple, dict], job: dict) -> None:
 
 
 def find_duplicate(index: dict[tuple, dict], job: dict) -> dict | None:
+    """Return the existing job this one identifies as (via any single
+    job_identity_keys() tier), or None if it's genuinely new."""
     for key in job_identity_keys(job):
         existing = index.get(key)
         if existing is not None:
@@ -1023,6 +1049,15 @@ def collect_workday(sources: dict, keywords: list[str], preferred_locations: lis
 # --------------------------------------------------------------------------
 
 def run_discovery(sources: dict, candidate: dict, jobs_path: Path, config: dict, dry_run: bool) -> list[dict]:
+    """Orchestrate Stages 1-3 for one run: fetch from every configured
+    connector, dedupe against `jobs_path`'s existing history (Stage 2), score
+    every genuinely new job (Stage 3, via score_job.py), and -- unless
+    dry_run -- persist existing+new back to `jobs_path` and write a shortlist
+    note for anything AUTO_APPLY/REVIEW. Returns only the newly-added jobs
+    this run (rediscovered duplicates are not included; they only got their
+    last_seen_at refreshed in place). Safe to call repeatedly: re-running on
+    unchanged sources produces the same jobs_path length, not duplicates.
+    """
     keywords = expand_target_titles(candidate.get("target_titles", []), candidate.get("secondary_titles", []))
     preferred_locations = [*candidate.get("preferred_locations", []), *REMOTE_PSEUDO_LOCATIONS]
 

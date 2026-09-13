@@ -104,7 +104,20 @@ FAMILY_UNKNOWN_DAMPENING = 0.6
 
 AUTO_APPLY_MIN_SCORE = 85
 REVIEW_MIN_SCORE = 75
-AUTO_APPLY_MAX_EXPERIENCE_GAP = 1.0
+# AUTO_APPLY requires the job's stated minimum experience to be no greater
+# than the candidate's actual professional experience (gap <= 0 -- see
+# score_experience_fit(): gap is 0.0 whenever the requirement is unstated,
+# already met, or the candidate is overqualified, and positive ONLY when
+# underqualified). A previous, more permissive value here (1.0) let a
+# candidate with 1 year of professional experience reach AUTO_APPLY against
+# a job explicitly requiring 2 years, because the numeric gap (1.0) looked
+# small even though the candidate had only half the required experience.
+# Experience SCORING may still award partial credit to a slightly
+# underqualified candidate (see score_experience_fit's gradient) -- that
+# credit can raise overall_match_score and route a job to REVIEW, but it
+# must never by itself unlock AUTO_APPLY. A high score does not override an
+# experience mismatch: score and application decision are independent.
+AUTO_APPLY_MAX_EXPERIENCE_GAP = 0.0
 REVIEW_MAX_EXPERIENCE_GAP = 2.0
 
 ENTRY_CAREER_LEVELS = {"ENTRY_LEVEL", "JUNIOR"}
@@ -612,6 +625,14 @@ def decide_application(
     total_score: int, role_family_result: dict, career_level_result: dict,
     experience_result: dict, critical_missing: bool, appears_legitimate: bool,
 ) -> dict[str, Any]:
+    """Decide AUTO_APPLY / REVIEW / SKIP -- independent of total_score's magnitude.
+
+    Returns {"decision": ..., "reason": ...}. The SKIP gates below are hard
+    disqualifiers checked in a fixed order before AUTO_APPLY is ever
+    considered, so a high total_score can never override a seniority
+    mismatch, a role-family mismatch, a large experience gap, or a critical
+    missing requirement.
+    """
     level = career_level_result["level"]
     gap = experience_result.get("gap", 0) or 0
     is_senior_plus = level in SENIOR_PLUS_CAREER_LEVELS
@@ -637,7 +658,7 @@ def decide_application(
         and not critical_missing
         and appears_legitimate
     ):
-        return {"decision": "AUTO_APPLY", "reason": f"Score {total_score} >= {AUTO_APPLY_MIN_SCORE}, target role family, {level} level, and only a {gap:g}-year experience gap."}
+        return {"decision": "AUTO_APPLY", "reason": f"Score {total_score} >= {AUTO_APPLY_MIN_SCORE}, target role family, {level} level, and the stated experience requirement does not exceed your professional experience."}
 
     # Otherwise, anything that survived the SKIP gate is worth a human look.
     reasons = []
@@ -657,6 +678,19 @@ def decide_application(
 # --------------------------------------------------------------------------
 
 def score_job(job: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    """Entry point of the V2 matching engine: score one job against one
+    candidate and independently decide AUTO_APPLY/REVIEW/SKIP.
+
+    `job` follows the schema documented at the top of this file (missing
+    fields are unknown, never treated as a negative signal); `candidate` is
+    `data/candidate_profile.json`'s shape. Returns a dict with
+    `overall_match_score`, `application_decision`, the full 9-component
+    `breakdown`, and the human-readable evidence/gap/risk explanations
+    scripts/discover_jobs.py writes into each shortlist note. See this
+    module's top-of-file docstring for the full weighting/decision rules --
+    this function only wires those pieces together and must not itself
+    change any weight, threshold, or gate.
+    """
     role_family_result = score_role_family(job, candidate)
     family = role_family_result["family"]
     dampening = family_dampening_factor(role_family_result)

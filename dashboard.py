@@ -75,6 +75,10 @@ def matches_filters(
     location: str | None = None, source: str | None = None,
     min_score: float | None = None, search: str | None = None,
 ) -> bool:
+    """True if `job` satisfies every given filter (an unset/"All" filter
+    always passes). `search` matches title, company, description, and both
+    skill lists -- a job with no score never satisfies a min_score filter,
+    since an unknown score can't be shown to meet a stated minimum."""
     if decision and decision != "All" and job.get("application_decision") != decision:
         return False
     if role_family and role_family != "All" and job.get("role_family") != role_family:
@@ -110,6 +114,9 @@ def filter_and_sort(
     location: str | None = None, source: str | None = None, min_score: float | None = None,
     search: str | None = None, sort: str = "score", today: str | None = None,
 ) -> list[dict]:
+    """Apply the Today/All view, every matches_filters() filter, and one of
+    SORT_KEYS, in that order. `today` is injectable for tests; the running
+    dashboard always uses the real current date via today_str()."""
     today = today or today_str()
     result = jobs
     if view == "today":
@@ -120,6 +127,12 @@ def filter_and_sort(
 
 
 def build_payload(jobs: list[dict], **filter_kwargs) -> dict:
+    """Build the full /api/jobs response: today/all/decision counts (always
+    computed over the FULL unfiltered `jobs`, so the stat tiles never shift
+    just because a filter is active), the role-family/source dropdown
+    options, and the actually filtered+sorted job list. Every field on each
+    job dict is passed through unchanged -- this never projects a job down
+    to a summary shape, so the dashboard's detail panel always has everything."""
     today = today_str()
     counts = {
         "today": sum(1 for j in jobs if is_today_job(j, today)),
