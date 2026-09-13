@@ -10,7 +10,6 @@ Run directly:
 
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 import unittest

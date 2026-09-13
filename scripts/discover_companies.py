@@ -62,8 +62,11 @@ DEFAULT_MAX_PAGES_PER_COMPANY = 1  # Greenhouse/Lever/Ashby's public list endpoi
 # config shape matches Workday's (which does paginate, unchanged in
 # discover_jobs.py) and so a future paginated connector has a home for it --
 # it is not silently ignored, verify_* below asserts exactly one request.
-DEFAULT_REQUEST_DELAY_SECONDS = 0.4
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 20
+# Reuse discover_jobs.py's request-politeness defaults rather than redefining
+# the same numbers here -- one company-verification request per candidate
+# should behave identically to a job-fetch request against the same ATS.
+DEFAULT_REQUEST_DELAY_SECONDS = dj.DEFAULT_REQUEST_DELAY_SECONDS
+DEFAULT_REQUEST_TIMEOUT_SECONDS = dj.DEFAULT_REQUEST_TIMEOUT_SECONDS
 
 SOURCE_FIELD = {
     "greenhouse": "title",
