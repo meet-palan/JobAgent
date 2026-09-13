@@ -2,19 +2,32 @@
 
 A personal job-search assistant: it discovers job postings from public ATS
 APIs, scores them against a candidate's real profile, and surfaces the good
-ones on a local dashboard. Everything is deterministic, dependency-free
-Python — no browser automation, no LLM calls, no automated application
-submission.
+ones on a local dashboard. Phase 5 (discovery through matching) is
+deterministic, dependency-free Python -- no LLM calls there at all. Phase 6
+adds an LLM-assisted application-intelligence layer on top, still with no
+browser automation and no automated application submission.
 
 ## Current phase
 
-**Phase 5 — complete.** Company discovery, job discovery/normalization,
-deduplication with history tracking, the V2 matching engine, and a read-only
-dashboard are all implemented, tested (190 tests), and validated against
-live data (203 unique jobs at last run). A pre-Phase-6 safety audit tightened
-the AUTO_APPLY experience gate (see "AUTO_APPLY / REVIEW / SKIP" below) — see
-`docs/JobAgent_Algorithm_Reference.pdf` for full algorithm detail and
-`docs/JobAgent_Project_Analysis.pdf` for a structural walkthrough.
+**Phase 5 — complete and frozen.** Company discovery, job discovery/
+normalization, deduplication with history tracking, the V2 matching engine,
+and a read-only dashboard are all implemented, tested (190 tests), and
+validated against live data (203 unique jobs at last run). A pre-Phase-6
+safety audit tightened the AUTO_APPLY experience gate (see "AUTO_APPLY /
+REVIEW / SKIP" below) — see `docs/JobAgent_Algorithm_Reference.pdf` for full
+algorithm detail and `docs/JobAgent_Project_Analysis.pdf` for a structural
+walkthrough.
+
+**Phase 6 — Application Intelligence — complete and frozen.** Turns an
+AUTO_APPLY/REVIEW job into a structured job analysis, a tailored resume, a
+cover letter when useful, and application-question answers -- see
+"Application Intelligence (Phase 6)" below. Still does not submit anything
+anywhere.
+
+**Phase 6.1 — Human Application Review — complete.** A review gate on top of
+Phase 6: a human records a quality verdict (APPROVE / NEEDS_CHANGES / REJECT)
+on each generated package before anything could ever move toward submission
+in a later phase -- see "Human Application Review (Phase 6.1)" below.
 
 ## Architecture
 
@@ -51,21 +64,38 @@ JobAgent/
 │   └── applied/                      Already applied to
 │
 ├── applications/                Generated application material (per-application, not per-job)
-│   ├── resumes/ · cover_letters/ · answers/ · pending/
+│   ├── resumes/ · cover_letters/ · answers/
+│   ├── pending/<job_id>/          Phase 6 output: analysis/resume/cover_letter/answers/application_package.json
+│   └── review/<job_id>/            Phase 6.1 output: review.json (human verdict, gitignored)
 │
 ├── data/                        Structured, machine-readable source of truth
 │   ├── jobs.json                  All tracked postings (the schema below)
 │   ├── applications.json           Tracked applications & status
 │   ├── candidate_profile.json      Structured mirror of profile/*.md
 │   ├── discovery_sources.json      ATS companies discovery actually queries (verified)
-│   └── discovery_candidates.json   Unverified seed list -- only discover_companies.py reads it
+│   ├── discovery_candidates.json   Unverified seed list -- only discover_companies.py reads it
+│   └── application_intelligence/   Phase 6 job-analysis cache, gitignored (keyed per job id)
 │
 ├── scripts/
 │   ├── discover_companies.py      Stage 0 -- verify & promote new ATS company boards
 │   ├── discover_jobs.py           Stage 1+2 -- fetch, normalize, dedupe, persist, score
-│   └── score_job.py                Stage 3 -- the V2 matching/decision engine (STABLE, see CLAUDE.md)
+│   ├── score_job.py                Stage 3 -- the V2 matching/decision engine (STABLE, see CLAUDE.md)
+│   ├── candidate_context.py        Phase 6 -- profile loading, evidence blob, verified facts
+│   ├── llm_provider.py              Phase 6 -- LLMProvider interface (ClaudeProvider/MockProvider)
+│   ├── prompts.py                    Phase 6 -- versioned prompt templates
+│   ├── job_analysis.py                Phase 6 -- the one cached structured job analysis
+│   ├── resume_tailoring.py             Phase 6 -- resume content + verbatim-history rendering
+│   ├── cover_letter.py                  Phase 6 -- cover letter drafting
+│   ├── application_answers.py            Phase 6 -- Q&A, deterministic where possible
+│   ├── claim_validation.py                Phase 6 -- deterministic fact-checking of LLM output
+│   ├── text_quality.py                     Phase 6.1 -- whitespace-artifact detection/normalization
+│   ├── application_package.py               Phase 6 -- package assembly + readiness check
+│   ├── run_phase6.py                         Phase 6 -- orchestrator / CLI entry point
+│   ├── review.py                              Phase 6.1 -- review record model + workflow
+│   └── review_application.py                   Phase 6.1 -- human review CLI
 │
 ├── dashboard.py                 Local read-only HTTP server + JSON API over data/jobs.json
+│                                  (+ read-only Phase 6/6.1 status via /api/intelligence,/api/review)
 ├── dashboard/index.html          The dashboard's single-page UI
 │
 ├── tests/                        One test file per script, plain unittest, no network calls
@@ -193,11 +223,125 @@ never duplicates a job, and only refreshes `last_seen_at` on unchanged ones.
 python tests/score_job.py           # 76 tests -- the V2 matching engine
 python tests/discover_jobs.py       # 58 tests -- fetch/normalize/dedupe/persist
 python tests/discover_companies.py  # 23 tests -- company verification
-python tests/dashboard.py           # 33 tests -- filter/sort/payload logic
+python tests/dashboard.py           # 43 tests -- filter/sort/payload logic + Phase 6/6.1 status visibility
+python tests/phase6.py              # 53 tests -- application intelligence, all LLM calls mocked
+python tests/text_quality.py        # 16 tests -- whitespace-artifact detection/normalization
+python tests/review.py              # 27 tests -- Phase 6.1 human review workflow
 ```
 
-Plain `unittest`, no test runner installed, no network calls in any suite
-(connectors are tested against fixture payloads).
+Plain `unittest` (filenames don't follow pytest's default discovery pattern
+-- use `pytest --import-mode=importlib tests/<name>.py` if you prefer
+pytest). No network calls in any suite (connectors are tested against
+fixture payloads; Phase 6/6.1 tests use `llm_provider.MockProvider`, never a
+live model).
+
+## Application Intelligence (Phase 6)
+
+For each AUTO_APPLY/REVIEW job (SKIP jobs are excluded by default -- no
+point spending an LLM call on a job the candidate isn't applying to; a
+specific SKIP job can still be run via `--job-id` for debugging),
+`scripts/run_phase6.py` produces one structured job analysis, a tailored
+resume, a cover letter when useful, and answers to a standard set of
+application questions -- never submitting anything anywhere.
+
+```
+python scripts/run_phase6.py --max-jobs 3              # process a few AUTO_APPLY/REVIEW jobs
+python scripts/run_phase6.py --job-id <id>              # process one specific job (any decision)
+python scripts/run_phase6.py --provider mock --mock-response '{...}'   # offline dry run, no API key needed
+```
+
+Requires `ANTHROPIC_API_KEY` in the environment for real runs (`--provider
+claude`, the default) -- credentials are never hardcoded or written into
+generated job data.
+
+**Architecture**: `scripts/candidate_context.py` (profile loading + evidence
+blob), `scripts/prompts.py` (versioned prompt templates), `scripts/llm_provider.py`
+(provider interface — `ClaudeProvider` / `MockProvider`), `scripts/job_analysis.py`
+(the one cached LLM call every other module reuses), `scripts/resume_tailoring.py`,
+`scripts/cover_letter.py`, `scripts/application_answers.py`, `scripts/claim_validation.py`
+(deterministic fact-checking of generated content), `scripts/application_package.py`
+(assembly + readiness check).
+
+**Truthfulness**: employment dates and education are copied verbatim from
+`profile.md` -- the LLM never even sees them as editable. Every LLM-drafted
+sentence (resume highlights, cover letter, open-ended answers) is checked by
+`claim_validation.py` for overclaimed years of experience, unverified
+employer names, and unsupported quantified claims before being trusted; a
+flagged artifact is marked `NEEDS_REVIEW`, never silently accepted.
+
+**Caching**: an analysis (and the resume/cover-letter/answers built from it)
+is cached to `applications/pending/<job_id>/`, keyed by a fingerprint of the
+job's id+description, the candidate profile's hash, and the prompt version.
+Re-running Phase 6 on an unchanged job makes zero LLM calls; a changed job
+description, an edited candidate profile, or a bumped prompt version each
+invalidate only the affected job.
+
+**Generation quality (Phase 6.1 fix)**: a real smoke test surfaced two defect
+classes -- word-concatenation artifacts (e.g. "requirementgathering") traced
+to `ClaudeProvider.complete()` joining multiple response text blocks with an
+empty string instead of a space (fixed at the source), and resumes/cover
+letters explicitly narrating the candidate's own experience gap. Fixed via
+`scripts/text_quality.py` (safe whitespace normalization + a conservative,
+documented-as-imperfect artifact detector) and
+`claim_validation.check_experience_gap_language()` (a resume may never
+mention a gap; a cover letter may acknowledge one at most once, never
+repeatedly or defensively) -- both prompts were also updated accordingly.
+
+**Status**: architecture, caching, and 53 tests (all LLM calls mocked) are in
+place and passing. Validated twice against real data: first a mocked dry run
+(one live REVIEW job plus a constructed AUTO_APPLY fixture), then a **live
+run against the real Claude API** with the same two fixtures. The live run
+surfaced and fixed two real bugs: (1) `max_tokens` was too low to leave room
+for the model's internal reasoning plus a full structured response, causing
+truncated/empty output on the larger prompts -- fixed by raising the budget
+and detecting `stop_reason: max_tokens` explicitly rather than failing with a
+confusing "invalid JSON" error; (2) `claim_validation` flagged the job's own
+company name (e.g. "interest in the role at Acme") as a fabricated past
+employer -- fixed by exempting the target company from that check. Both
+fixes are covered by new tests. The live run's actual generated content
+(job analysis, resume, cover letter, answers) was manually inspected and
+found truthful -- e.g. one interview-style application ANSWER (not the
+resume) proactively disclosed the candidate's real experience gap ("my total
+professional experience is 1.0 years, which is below the 3.0+ years this
+role requires") rather than glossing over it; that kind of direct disclosure
+remains appropriate for a directly-asked question, which is why
+`application_answers.py` deliberately does not use the Phase 6.1
+gap-language restriction the resume and cover letter now do (see
+"Generation quality (Phase 6.1 fix)" above).
+
+## Human Application Review (Phase 6.1)
+
+A mandatory human gate on top of Phase 6, before anything could ever move
+toward submission in a later phase. No LLM calls, no browser automation --
+it only reads a package Phase 6 already wrote and records a human's verdict.
+
+```
+python scripts/review_application.py --list-pending                        # what needs a look
+python scripts/review_application.py --job-id <id>                          # show the package + current review
+python scripts/review_application.py --job-id <id> --approve --notes "Looks good"
+python scripts/review_application.py --job-id <id> --needs-changes --resume-quality 2 \
+    --issue "Summary reads too generic" --notes "Regenerate resume"
+python scripts/review_application.py --job-id <id> --reject --notes "Not a genuine fit"
+```
+
+**Review record** (`applications/review/<job_id>/review.json`): `review_status`
+(`PENDING` / `APPROVED` / `NEEDS_CHANGES` / `REJECTED`), six optional 1-5
+quality scores (`analysis_quality`, `resume_quality`, `cover_letter_quality`,
+`answers_quality`, `truthfulness`, `overall_quality` -- a reviewer is never
+forced to score every component), a free-text `issues` list, `needs_regeneration`,
+`review_notes`, and `reviewed_at`. `scripts/review.py` validates every field
+before writing -- an invalid status or an out-of-range score raises rather
+than silently corrupting the file.
+
+**Scope rule**: only jobs Phase 6 actually processes (`AUTO_APPLY`/`REVIEW`,
+same rule as `run_phase6.select_jobs()`) that already have a generated
+package appear in `--list-pending` -- a `REVIEW` job with no package yet
+just hasn't been through Phase 6, and `SKIP` jobs never enter review at all.
+
+**Dashboard**: read-only visibility only (`review_status`, `overall_quality`,
+`needs_regeneration` per job, plus a "View Review Notes" panel that fetches
+`/api/review/<job_id>`) -- the dashboard never writes a review or calls the
+review CLI itself; all mutation happens through the CLI above.
 
 ## How the static candidate profile works
 
@@ -221,5 +365,9 @@ matching layers.
 - Lever: 3 active companies; further Lever company discovery hasn't found
   additional working boards yet.
 - Single static candidate only — no accounts, no auth, no multi-user support.
-- No resume tailoring, cover-letter generation, or application submission —
-  those are explicitly future phases, not built here.
+- Resumes/cover letters render as `.txt`, not `.pdf` — a deliberate content-
+  vs-typesetting simplification; say the word if you want real PDF output.
+- `check_unverified_employers`'s proper-noun heuristic is best-effort, not
+  exhaustive — it catches obvious fabrications, not every possible one.
+- No application submission, browser automation, or CAPTCHA/anti-bot handling
+  anywhere — those are explicitly future phases, not built here.

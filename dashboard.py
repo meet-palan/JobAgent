@@ -3,7 +3,13 @@
 Serves one static HTML/JS page (dashboard/index.html) plus a tiny JSON API
 (/api/jobs) that filters and sorts jobs already scored by
 scripts/score_job.py via scripts/discover_jobs.py. Reads data/jobs.json
-fresh on every request -- no caching, no second database.
+fresh on every request -- no caching, no second database. It also exposes
+/api/intelligence/<job_id>, a read-only view of whatever Phase 6
+(scripts/run_phase6.py) has already written to applications/pending/<job_id>/,
+and /api/review/<job_id>, a read-only view of whatever a human reviewer has
+recorded via scripts/review_application.py (Phase 6.1) to applications/review/<job_id>/
+-- both routes only read a file that may or may not exist; neither invokes
+Phase 6, an LLM, or the review CLI itself.
 
 This is display-only: it never calls an LLM, never re-runs the matching
 engine, never re-runs discovery, and never writes to data/jobs.json.
@@ -28,6 +34,8 @@ from urllib.parse import parse_qs, urlparse
 REPO_ROOT = Path(__file__).resolve().parent
 JOBS_PATH = REPO_ROOT / "data" / "jobs.json"
 STATIC_DIR = REPO_ROOT / "dashboard"
+PENDING_DIR = REPO_ROOT / "applications" / "pending"
+REVIEW_DIR = REPO_ROOT / "applications" / "review"
 DEFAULT_PORT = 8420
 
 
@@ -41,6 +49,69 @@ def today_str() -> str:
     """Actual current local date, in the same YYYY-MM-DD form discover_jobs.py
     stamps discovered_at/last_seen_at with. Never hardcoded/assumed."""
     return date.today().isoformat()
+
+
+def load_intelligence_status(job_id: str, pending_dir: Path = PENDING_DIR) -> str:
+    """Read-only visibility into Phase 6 (scripts/run_phase6.py), which
+    writes applications/pending/<job_id>/application_package.json. This is a
+    plain file check -- it never triggers Phase 6, never calls an LLM, and
+    never writes anything; a job that hasn't been processed yet simply has
+    no such file. Mirrors application_package.py's own status vocabulary so
+    the dashboard and the intelligence layer never drift into two different
+    sets of state names."""
+    path = pending_dir / job_id / "application_package.json"
+    if not path.exists():
+        return "NOT_PROCESSED"
+    try:
+        package = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return "NOT_PROCESSED"
+    if package.get("ready_for_browser_automation"):
+        return "READY_FOR_AUTOMATION"
+    if package.get("requires_human_review"):
+        return "READY_FOR_REVIEW"
+    for status in (package.get("analysis_status"), package.get("resume_status"), package.get("cover_letter_status")):
+        if status == "FAILED":
+            return "VALIDATION_FAILED"
+        if status == "NEEDS_REVIEW":
+            return "NEEDS_USER_INPUT"
+    return "PROCESSING"
+
+
+def load_application_package(job_id: str, pending_dir: Path = PENDING_DIR) -> dict | None:
+    """Full read-only package content for the detail-panel 'View Application
+    Package' action -- same file load_intelligence_status summarizes."""
+    path = pending_dir / job_id / "application_package.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def load_review(job_id: str, review_dir: Path = REVIEW_DIR) -> dict | None:
+    """Full read-only Phase 6.1 review record, if a human has ever reviewed
+    this job -- written by scripts/review_application.py, never by the
+    dashboard. Returns None (not an error) for a job nobody has reviewed
+    yet; that is the normal, expected state for anything still PENDING."""
+    path = review_dir / job_id / "review.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def load_review_status(job_id: str, review_dir: Path = REVIEW_DIR) -> str:
+    """PENDING/APPROVED/NEEDS_CHANGES/REJECTED, or "NOT_REVIEWED" if no
+    review record exists at all yet (distinct from an explicit PENDING
+    record a reviewer has started but not finished)."""
+    review = load_review(job_id, review_dir)
+    if review is None:
+        return "NOT_REVIEWED"
+    return review.get("review_status", "NOT_REVIEWED")
 
 
 def load_jobs(path: Path = JOBS_PATH) -> list[dict]:
@@ -126,13 +197,21 @@ def filter_and_sort(
     return sorted(result, key=key_fn, reverse=(sort in SORT_DESCENDING))
 
 
-def build_payload(jobs: list[dict], **filter_kwargs) -> dict:
+def build_payload(
+    jobs: list[dict], *, pending_dir: Path = PENDING_DIR, review_dir: Path = REVIEW_DIR, **filter_kwargs
+) -> dict:
     """Build the full /api/jobs response: today/all/decision counts (always
     computed over the FULL unfiltered `jobs`, so the stat tiles never shift
     just because a filter is active), the role-family/source dropdown
     options, and the actually filtered+sorted job list. Every field on each
     job dict is passed through unchanged -- this never projects a job down
-    to a summary shape, so the dashboard's detail panel always has everything."""
+    to a summary shape, so the dashboard's detail panel always has everything.
+
+    Each returned job also gets `intelligence_status` (Phase 6 visibility --
+    see load_intelligence_status()) and `review_status`/`review_overall_quality`/
+    `review_needs_regeneration` (Phase 6.1 visibility -- see load_review())
+    added via a shallow copy, so the original job dicts from data/jobs.json
+    are never mutated."""
     today = today_str()
     counts = {
         "today": sum(1 for j in jobs if is_today_job(j, today)),
@@ -144,7 +223,21 @@ def build_payload(jobs: list[dict], **filter_kwargs) -> dict:
     role_families = sorted({j["role_family"] for j in jobs if j.get("role_family")})
     sources = sorted({j["source"] for j in jobs if j.get("source")})
     filtered = filter_and_sort(jobs, today=today, **filter_kwargs)
-    return {"today": today, "counts": counts, "role_families": role_families, "sources": sources, "jobs": filtered}
+
+    def annotate(job: dict) -> dict:
+        if not job.get("id"):
+            return dict(job)
+        review = load_review(job["id"], review_dir)
+        return {
+            **job,
+            "intelligence_status": load_intelligence_status(job["id"], pending_dir),
+            "review_status": (review or {}).get("review_status", "NOT_REVIEWED"),
+            "review_overall_quality": (review or {}).get("overall_quality"),
+            "review_needs_regeneration": (review or {}).get("needs_regeneration", False),
+        }
+
+    annotated = [annotate(j) for j in filtered]
+    return {"today": today, "counts": counts, "role_families": role_families, "sources": sources, "jobs": annotated}
 
 
 # --------------------------------------------------------------------------
@@ -197,6 +290,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 search=one("search"), sort=one("sort", "score"),
             )
             self._send_json(payload)
+            return
+        if parsed.path.startswith("/api/intelligence/"):
+            job_id = parsed.path[len("/api/intelligence/"):]
+            package = load_application_package(job_id)
+            if package is None:
+                self.send_error(404, "No Phase 6 application package for this job yet")
+                return
+            self._send_json(package)
+            return
+        if parsed.path.startswith("/api/review/"):
+            job_id = parsed.path[len("/api/review/"):]
+            review = load_review(job_id)
+            if review is None:
+                self.send_error(404, "No Phase 6.1 review record for this job yet")
+                return
+            self._send_json(review)
             return
         self.send_error(404, "Not found")
 

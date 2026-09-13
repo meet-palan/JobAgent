@@ -220,12 +220,31 @@ function render(data) {
   });
 }
 
+const INTELLIGENCE_LABELS = {
+  NOT_PROCESSED: 'Not processed', PROCESSING: 'Processing',
+  READY_FOR_REVIEW: 'Ready for review', READY_FOR_AUTOMATION: 'Ready for automation',
+  NEEDS_USER_INPUT: 'Needs user input', VALIDATION_FAILED: 'Validation failed',
+};
+
+// Phase 6.1 -- read-only labels for a human reviewer's verdict (recorded via
+// scripts/review_application.py). The dashboard never sets these itself.
+const REVIEW_LABELS = {
+  NOT_REVIEWED: 'Not reviewed', PENDING: 'Pending review',
+  APPROVED: 'Approved', NEEDS_CHANGES: 'Needs changes', REJECTED: 'Rejected',
+};
+
 function cardHtml(job) {
   const skills = [...(job.required_skills || []), ...(job.preferred_skills || [])];
   const skillsText = skills.length ? escapeHtml(skills.slice(0, 6).join(', ')) + (skills.length > 6 ? '…' : '') : 'Not provided';
   const discovered = job.discovered_at || job.date_discovered || 'Not provided';
   const applyUrl = job.application_url;
   const jobUrl = job.source_url || job.application_url;
+  const intelligenceLabel = INTELLIGENCE_LABELS[job.intelligence_status] || 'Not processed';
+  const reviewLabel = REVIEW_LABELS[job.review_status] || 'Not reviewed';
+  const reviewExtra = [
+    job.review_overall_quality != null ? `quality ${job.review_overall_quality}/5` : null,
+    job.review_needs_regeneration ? 'needs regeneration' : null,
+  ].filter(Boolean).join(', ');
   return `
     <div class="card">
       <h3>${escapeHtml(nv(job.title))}</h3>
@@ -236,6 +255,8 @@ function cardHtml(job) {
       <div class="meta">Experience: ${fmtExperience(job)}</div>
       <div class="meta">Salary: ${fmtSalary(job)}</div>
       <div class="meta">Posted: ${escapeHtml(nv(job.posted_date))} · Discovered: ${escapeHtml(discovered)}</div>
+      <div class="meta">Application Intelligence: ${escapeHtml(intelligenceLabel)}</div>
+      <div class="meta">Human Review: ${escapeHtml(reviewLabel)}${reviewExtra ? ' (' + escapeHtml(reviewExtra) + ')' : ''}</div>
       <div class="skills">Skills: ${skillsText}</div>
       <div class="card-actions">
         <button data-details="${escapeHtml(job.id || '')}">View Details</button>
@@ -260,6 +281,8 @@ function showDetails(jobId) {
   if (!job) return;
   const skills = [...(job.required_skills || []), ...(job.preferred_skills || [])];
   const capabilities = [...(job.relevant_evidence || []), ...(job.transferable_evidence || [])];
+  const hasPackage = job.intelligence_status && job.intelligence_status !== 'NOT_PROCESSED';
+  const hasReview = job.review_status && job.review_status !== 'NOT_REVIEWED';
   const html = `
     <h2>${escapeHtml(nv(job.title))}</h2>
     ${field('Company', job.company)}
@@ -288,9 +311,49 @@ function showDetails(jobId) {
     ${field('Source URL', job.source_url)}
     ${field('Source', job.source)}
     ${field('Source Job ID', job.source_job_id)}
+    <hr>
+    ${field('Application Intelligence', INTELLIGENCE_LABELS[job.intelligence_status] || 'Not processed')}
+    ${hasPackage ? `<button id="view-package-btn" data-job-id="${escapeHtml(job.id)}">View Application Package</button>
+      <div id="package-content"></div>` : '<div class="meta">No Phase 6 application package generated for this job yet.</div>'}
+    <hr>
+    ${field('Human Review', REVIEW_LABELS[job.review_status] || 'Not reviewed')}
+    ${field('Overall Quality', job.review_overall_quality != null ? job.review_overall_quality + '/5' : null)}
+    ${field('Needs Regeneration', job.review_needs_regeneration ? 'Yes' : null)}
+    ${hasReview ? `<button id="view-review-btn" data-job-id="${escapeHtml(job.id)}">View Review Notes</button>
+      <div id="review-content"></div>` : '<div class="meta">No Phase 6.1 review recorded for this job yet -- run scripts/review_application.py.</div>'}
   `;
   document.getElementById('panel-content').innerHTML = html;
   document.getElementById('overlay').classList.add('open');
+  const packageBtn = document.getElementById('view-package-btn');
+  if (packageBtn) packageBtn.addEventListener('click', () => loadApplicationPackage(packageBtn.dataset.jobId));
+  const reviewBtn = document.getElementById('view-review-btn');
+  if (reviewBtn) reviewBtn.addEventListener('click', () => loadReview(reviewBtn.dataset.jobId));
+}
+
+async function loadApplicationPackage(jobId) {
+  const target = document.getElementById('package-content');
+  target.textContent = 'Loading…';
+  try {
+    const res = await fetch(`/api/intelligence/${encodeURIComponent(jobId)}`, { cache: 'no-store' });
+    if (!res.ok) { target.textContent = 'No application package available.'; return; }
+    const pkg = await res.json();
+    target.innerHTML = `<pre style="white-space:pre-wrap; font-size:12px; background:var(--bg); padding:10px; border-radius:6px; border:1px solid var(--border);">${escapeHtml(JSON.stringify(pkg, null, 2))}</pre>`;
+  } catch (e) {
+    target.textContent = 'Failed to load application package.';
+  }
+}
+
+async function loadReview(jobId) {
+  const target = document.getElementById('review-content');
+  target.textContent = 'Loading…';
+  try {
+    const res = await fetch(`/api/review/${encodeURIComponent(jobId)}`, { cache: 'no-store' });
+    if (!res.ok) { target.textContent = 'No review record available.'; return; }
+    const review = await res.json();
+    target.innerHTML = `<pre style="white-space:pre-wrap; font-size:12px; background:var(--bg); padding:10px; border-radius:6px; border:1px solid var(--border);">${escapeHtml(JSON.stringify(review, null, 2))}</pre>`;
+  } catch (e) {
+    target.textContent = 'Failed to load review.';
+  }
 }
 
 document.getElementById('close-panel').onclick = () => document.getElementById('overlay').classList.remove('open');

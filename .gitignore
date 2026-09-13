@@ -35,3 +35,12 @@ applications/resumes/*
 !applications/resumes/.gitkeep
 applications/cover_letters/*
 !applications/cover_letters/.gitkeep
+applications/answers/*
+!applications/answers/.gitkeep
+applications/pending/*
+!applications/pending/.gitkeep
+applications/review/*
+!applications/review/.gitkeep
+
+# Phase 6 job-analysis cache (may reference candidate evidence/PII)
+data/application_intelligence/

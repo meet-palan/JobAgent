@@ -248,5 +248,94 @@ class LocationSourceScoreFilterTestCase(unittest.TestCase):
         self.assertEqual(result, [])
 
 
+class Phase6IntelligenceVisibilityTestCase(unittest.TestCase):
+    """Read-only visibility into Phase 6 application packages -- dashboard.py
+    must never call an LLM or trigger Phase 6; it only reads a package file
+    if scripts/run_phase6.py has already written one."""
+
+    def test_unprocessed_job_reports_not_processed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(db.load_intelligence_status("no-such-job", Path(tmp)), "NOT_PROCESSED")
+
+    def test_ready_for_automation_package_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = Path(tmp) / "job-1"
+            job_dir.mkdir(parents=True)
+            (job_dir / "application_package.json").write_text(
+                json.dumps({"ready_for_browser_automation": True, "requires_human_review": False}), encoding="utf-8"
+            )
+            self.assertEqual(db.load_intelligence_status("job-1", Path(tmp)), "READY_FOR_AUTOMATION")
+
+    def test_review_required_package_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = Path(tmp) / "job-1"
+            job_dir.mkdir(parents=True)
+            (job_dir / "application_package.json").write_text(
+                json.dumps({"ready_for_browser_automation": False, "requires_human_review": True}), encoding="utf-8"
+            )
+            self.assertEqual(db.load_intelligence_status("job-1", Path(tmp)), "READY_FOR_REVIEW")
+
+    def test_build_payload_annotates_jobs_with_intelligence_status(self):
+        jobs = [make_job(id="a")]
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = db.build_payload(jobs, view="all", pending_dir=Path(tmp))
+        self.assertEqual(payload["jobs"][0]["intelligence_status"], "NOT_PROCESSED")
+
+    def test_load_application_package_returns_none_when_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(db.load_application_package("no-such-job", Path(tmp)))
+
+    def test_load_application_package_returns_content_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = Path(tmp) / "job-1"
+            job_dir.mkdir(parents=True)
+            (job_dir / "application_package.json").write_text(json.dumps({"job_id": "job-1"}), encoding="utf-8")
+            self.assertEqual(db.load_application_package("job-1", Path(tmp)), {"job_id": "job-1"})
+
+
+class Phase61ReviewVisibilityTestCase(unittest.TestCase):
+    """Read-only visibility into Phase 6.1 review records -- dashboard.py
+    must never write a review or call the review CLI; it only reads what
+    scripts/review_application.py already wrote."""
+
+    def test_unreviewed_job_reports_not_reviewed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(db.load_review_status("no-such-job", Path(tmp)), "NOT_REVIEWED")
+            self.assertIsNone(db.load_review("no-such-job", Path(tmp)))
+
+    def test_approved_review_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = Path(tmp) / "job-1"
+            job_dir.mkdir(parents=True)
+            (job_dir / "review.json").write_text(json.dumps({"review_status": "APPROVED", "overall_quality": 5}), encoding="utf-8")
+            self.assertEqual(db.load_review_status("job-1", Path(tmp)), "APPROVED")
+            self.assertEqual(db.load_review("job-1", Path(tmp))["overall_quality"], 5)
+
+    def test_build_payload_annotates_jobs_with_review_fields(self):
+        jobs = [make_job(id="a")]
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = db.build_payload(jobs, view="all", pending_dir=Path(tmp), review_dir=Path(tmp))
+        annotated = payload["jobs"][0]
+        self.assertEqual(annotated["review_status"], "NOT_REVIEWED")
+        self.assertIsNone(annotated["review_overall_quality"])
+        self.assertFalse(annotated["review_needs_regeneration"])
+
+    def test_build_payload_reflects_needs_changes_review(self):
+        jobs = [make_job(id="a")]
+        with tempfile.TemporaryDirectory() as tmp:
+            pending_dir, review_dir = Path(tmp) / "pending", Path(tmp) / "review"
+            job_dir = review_dir / "a"
+            job_dir.mkdir(parents=True)
+            (job_dir / "review.json").write_text(
+                json.dumps({"review_status": "NEEDS_CHANGES", "overall_quality": 2, "needs_regeneration": True}),
+                encoding="utf-8",
+            )
+            payload = db.build_payload(jobs, view="all", pending_dir=pending_dir, review_dir=review_dir)
+        annotated = payload["jobs"][0]
+        self.assertEqual(annotated["review_status"], "NEEDS_CHANGES")
+        self.assertEqual(annotated["review_overall_quality"], 2)
+        self.assertTrue(annotated["review_needs_regeneration"])
+
+
 if __name__ == "__main__":
     unittest.main()

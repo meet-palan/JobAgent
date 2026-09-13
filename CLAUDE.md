@@ -10,15 +10,37 @@ review on a dashboard**. `profile/` holds the candidate's own information;
 `jobs/` and `applications/` hold human-readable working state; `data/` holds
 the structured (machine-readable) version of that state.
 
-## Current phase: Phase 5 (complete)
+## Current phase: Phase 5 frozen, Phase 6 frozen, Phase 6.1 complete
 
 Job discovery, deduplication, V2 matching/scoring, and a read-only dashboard
-are fully implemented, tested, and validated against live data. There is
-**no browser automation, no application-submission automation, no resume/
-cover-letter generation, and no LLM call anywhere in the discovery or
-matching pipeline** — every stage (fetch, normalize, dedupe, score, decide)
-is deterministic, dependency-free Python. Do not add any of the above unless
-explicitly asked; see "Before adding new capabilities" below.
+(Phase 5) are fully implemented, tested, and validated against live data, and
+are now frozen — see the "Matching rules" section below before touching
+`scripts/score_job.py`. **No LLM call happens anywhere in Phase 5** — every
+stage (fetch, normalize, dedupe, score, decide) is deterministic,
+dependency-free Python, and must stay that way.
+
+Phase 6 (Application Intelligence -- `scripts/job_analysis.py`,
+`resume_tailoring.py`, `cover_letter.py`, `application_answers.py`,
+`claim_validation.py`, `application_package.py`, `run_phase6.py`) is
+intentionally LLM-assisted, but only for AUTO_APPLY/REVIEW jobs Phase 5 has
+already approved for further processing — it never re-decides whether a job
+is suitable, only how to position the candidate for one Phase 5 already
+picked. It still has **no browser automation, no CAPTCHA handling, and no
+application submission** — see `README.md` → "Application Intelligence
+(Phase 6)" for the full design (architecture, mocked tests, and a live
+Claude API smoke test are all complete). `scripts/text_quality.py` and
+`claim_validation.check_experience_gap_language()` are the Phase 6.1
+generation-quality fixes -- a resume must never mention the candidate's own
+experience gap (max_gap_mentions=0), a cover letter may acknowledge one at
+most once (max_gap_mentions=1); don't loosen either without a reason.
+
+Phase 6.1 (`scripts/review.py`, `scripts/review_application.py`) is a human
+review GATE on top of Phase 6 -- it makes no LLM calls, reads a package
+Phase 6 already wrote, and records a human verdict to
+`applications/review/<job_id>/review.json`. It never writes to
+`data/jobs.json` or `application_package.json`, and SKIP jobs never reach it
+(same rule as Phase 6's `select_jobs()`). Nothing past this point submits an
+application -- that's Phase 7, not started.
 
 The static candidate profile (`profile/*.md` + `data/candidate_profile.json`)
 is the only candidate the system currently serves. The long-term direction is
@@ -119,9 +141,14 @@ that doesn't touch logic. Anything else needs a matching test update first.
 
 ## Testing requirements
 
-Before committing any change, run all four suites and confirm counts:
-`tests/score_job.py` (76), `tests/discover_jobs.py` (58),
-`tests/discover_companies.py` (23), `tests/dashboard.py` (33) — 190 total.
+Before committing any change, run all seven suites (plain `unittest`, or
+`pytest --import-mode=importlib` -- the filenames don't follow pytest's
+default discovery pattern) and confirm counts: `tests/score_job.py` (76),
+`tests/discover_jobs.py` (58), `tests/discover_companies.py` (23),
+`tests/dashboard.py` (43), `tests/phase6.py` (53), `tests/text_quality.py`
+(16), `tests/review.py` (27) — 296 total. Phase 6/6.1 tests never call a
+live LLM (`llm_provider.MockProvider` only) — the live Claude API path has
+been validated separately (README.md → "Application Intelligence (Phase 6)").
 Add tests for new behavior; never delete or weaken a test just to make it
 pass. `discover_jobs.py`/`discover_companies.py` tests use fixture payloads
 and mocks — no real network calls in the suite.
